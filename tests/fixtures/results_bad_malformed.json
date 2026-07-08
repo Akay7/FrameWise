@@ -1,0 +1,7 @@
+[
+  {
+    "task_id": "v1",
+    "captions": {
+      "formal": "trailing comma makes this invalid JSON",
+    }
+  }

@@ -1,0 +1,15 @@
+[project]
+name = "video-captioning-agent"
+version = "2.0.0"
+requires-python = ">=3.10"
+# NOTE: torch / torchvision are installed from the ROCm wheel index in the
+# Dockerfile (not from PyPI), so they are intentionally omitted here.
+dependencies = [
+    "transformers>=4.49.0",
+    "qwen-vl-utils",
+    "accelerate",
+    "sentencepiece",
+    "Pillow",
+    "requests",
+    "huggingface-hub",
+]

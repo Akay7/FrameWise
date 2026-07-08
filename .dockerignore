@@ -18,3 +18,14 @@ README*
 
 # Docs and extras
 docs/
+
+# Tests (kept out of the image and off the 10GB cap)
+tests/
+
+# Dev-only tooling and planning artifacts
+openspec/
+.agent/
+.opencode/
+.github/
+.ruff_cache/
+sample_tasks.json

@@ -1,0 +1,20 @@
+[
+  {
+    "task_id": "v1",
+    "captions": {
+      "formal": "A golden autumn boulevard with city traffic moving beneath trees.",
+      "sarcastic": "Ah yes, another breathtaking street, now with 40% more leaves.",
+      "humorous_tech": "Rush hour rendering at 25fps, and traffic is still the bottleneck.",
+      "humorous_non_tech": "The trees threw a leaf party and nobody offered to sweep up."
+    }
+  },
+  {
+    "task_id": "v99",
+    "captions": {
+      "formal": "A result for a task that was never requested.",
+      "sarcastic": "Surprise, an uninvited guest.",
+      "humorous_tech": "This object has no matching key in the request map.",
+      "humorous_non_tech": "Nobody ordered this, but here it is anyway."
+    }
+  }
+]
