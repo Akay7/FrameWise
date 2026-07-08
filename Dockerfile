@@ -1,60 +1,47 @@
-# Track 2 — Video Captioning Agent (AMD ROCm, linux/amd64).
+# Track 2 — Video Captioning Agent (linux/amd64).
 #
-# Slim Ubuntu base + torch from the ROCm wheel index (self-contained ROCm
-# runtime) rather than the full rocm/pytorch image, which alone can exceed the
-# 10 GB compressed cap. Model weights are baked in for zero network dependency
-# at evaluation time.
-FROM ubuntu:22.04
+# Pure external captioning: the container calls a hosted vision model, so it
+# ships no model weights and no GPU/torch stack. A slim Python base + ffmpeg is
+# all it needs, keeping the image tiny and cold-start well under 60s.
+FROM python:3.13-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/opt/hf \
-    HF_HUB_DISABLE_TELEMETRY=1 \
-    TOKENIZERS_PARALLELISM=false
+    PIP_NO_CACHE_DIR=1
 
-# ROCm wheel channel — override at build time to match the host's ROCm version:
-#   docker build --build-arg ROCM_INDEX=https://download.pytorch.org/whl/rocm6.3 .
-ARG ROCM_INDEX=https://download.pytorch.org/whl/rocm6.2
-ARG MODEL_ID=Qwen/Qwen2.5-VL-3B-Instruct
+# Caption provider selected at runtime: gemini | openai | anthropic.
+ENV CAPTION_PROVIDER=gemini
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip python3-venv \
-        ffmpeg libgl1 libglib2.0-0 \
+        ffmpeg \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# torch / torchvision from the ROCm index (NOT PyPI, which would be CUDA/CPU).
-RUN pip3 install --no-cache-dir --index-url ${ROCM_INDEX} \
-        torch torchvision
-
-# Application dependencies.
 COPY pyproject.toml ./
 RUN pip3 install --no-cache-dir \
-        "transformers>=4.49.0" \
-        qwen-vl-utils \
-        accelerate \
-        sentencepiece \
-        Pillow \
         requests \
-        huggingface-hub
+        google-genai \
+        openai \
+        anthropic
 
-# Bake model weights into the image (no GPU needed to just download).
-RUN python3 -c "\
-from huggingface_hub import snapshot_download; \
-from transformers import AutoProcessor; \
-mid='${MODEL_ID}'; \
-print('Downloading', mid); \
-snapshot_download(mid); \
-AutoProcessor.from_pretrained(mid); \
-print('Weights cached under', '${HF_HOME}')"
-
-COPY main.py validation.py ./
+COPY main.py media.py providers.py validation.py ./
 
 RUN mkdir -p /input /output
 
-ENV MODEL_ID=${MODEL_ID}
+# Optional, OFF BY DEFAULT: bake an API key into the image for judges that
+# cannot inject environment variables. Prefer passing the key at run time
+# (docker run -e GEMINI_API_KEY=...). main.py loads this file into the
+# environment at startup. Example:
+#   docker build --build-arg BAKE_PROVIDER_KEY_ENV=GEMINI_API_KEY \
+#                --build-arg BAKE_PROVIDER_KEY=sk-... .
+ARG BAKE_PROVIDER_KEY_ENV=""
+ARG BAKE_PROVIDER_KEY=""
+RUN if [ -n "$BAKE_PROVIDER_KEY_ENV" ] && [ -n "$BAKE_PROVIDER_KEY" ]; then \
+        printf '%s=%s\n' "$BAKE_PROVIDER_KEY_ENV" "$BAKE_PROVIDER_KEY" \
+            > /app/.baked_env; \
+    fi
+ENV BAKED_ENV_FILE=/app/.baked_env
 
 ENTRYPOINT ["python3", "main.py"]

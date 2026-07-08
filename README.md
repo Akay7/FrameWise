@@ -1,6 +1,106 @@
 # Track 2 — Video Captioning Agent
 
-Reads `/input/tasks.json`, generates a caption per requested style for every clip using a single local video-native VLM (Qwen2.5-VL, run on ROCm), and writes `/output/results.json`.
+Reads `/input/tasks.json`, generates a caption per requested style for every clip
+by calling a hosted vision model, and writes `/output/results.json`. No local
+model and no GPU are required — the container is a slim Python image that runs
+anywhere with network access.
+
+## Caption providers
+
+The provider is chosen at runtime via `CAPTION_PROVIDER`:
+
+| `CAPTION_PROVIDER` | Model input | API key env var | Notes |
+| --- | --- | --- | --- |
+| `gemini` (default) | native video | `GEMINI_API_KEY` | uploads the clip via the Files API |
+| `openai` | sampled frames | `OPENAI_API_KEY` | frames sent as images in one call |
+| `anthropic` | sampled frames | `ANTHROPIC_API_KEY` | frames sent as images in one call |
+
+Each clip is captioned in a **single call** that returns one caption per
+requested style as JSON. Optional overrides: `GEMINI_MODEL` / `OPENAI_MODEL` /
+`ANTHROPIC_MODEL`, `OPENAI_BASE_URL` (point the `openai` provider at any
+OpenAI-compatible server — see [Run locally with Lemonade](#run-locally-with-lemonade-no-cloud-no-key)),
+`NUM_FRAMES`, `FRAME_LONG_SIDE`, `REQUEST_TIMEOUT`, `MAX_RETRIES`.
+
+**Prerequisites at run time:** network egress to the provider and a valid API
+key for the selected provider. If the provider is unreachable or the key is
+missing, the run fails loudly (non-zero exit) rather than emitting fabricated
+captions — the `results.json` it writes is always well-formed JSON.
+
+### Run
+
+```bash
+docker run --rm \
+  -e CAPTION_PROVIDER=gemini \
+  -e GEMINI_API_KEY=... \
+  -v /path/to/tasks.json:/input/tasks.json:ro \
+  -v /path/to/output:/output \
+  <image>
+```
+
+### Run locally with Lemonade (no cloud, no key)
+
+[Lemonade](https://lemonade-server.ai/) serves local models behind an
+**OpenAI-compatible** API, so the `openai` provider can target it by setting
+`OPENAI_BASE_URL` — no cloud account or key required. Because that adapter is
+frame-based, load a **vision-capable** model in Lemonade (e.g. a Qwen2.5-VL
+variant); text-only models can't caption frames.
+
+1. Install and start Lemonade (default port `8000`):
+
+   ```bash
+   pip install lemonade-sdk
+   lemonade-server serve
+   ```
+
+2. Pull/load a vision model and note its served name:
+
+   ```bash
+   lemonade-server list          # see available / installed models
+   lemonade-server pull <vision-model>
+   ```
+
+3. Point the agent at it. Running on the host (no container):
+
+   ```bash
+   CAPTION_PROVIDER=openai \
+   OPENAI_BASE_URL=http://localhost:8000/api/v1 \
+   OPENAI_MODEL=<vision-model> \
+   INPUT_PATH=./sample_tasks.json OUTPUT_PATH=./results.json \
+   python3 main.py
+   ```
+
+   From the container, reach the host's Lemonade server with host networking:
+
+   ```bash
+   docker run --rm --network=host \
+     -e CAPTION_PROVIDER=openai \
+     -e OPENAI_BASE_URL=http://localhost:8000/api/v1 \
+     -e OPENAI_MODEL=<vision-model> \
+     -v "$PWD/sample_tasks.json:/input/tasks.json:ro" \
+     -v "$PWD/out:/output" \
+     video-captioning-agent
+   ```
+
+   (On macOS/Windows Docker Desktop use `http://host.docker.internal:8000/api/v1`
+   instead of `--network=host`.)
+
+Any other OpenAI-compatible local server (vLLM, LM Studio, Ollama) works the same
+way — just change `OPENAI_BASE_URL` and `OPENAI_MODEL`.
+
+### Optional: bake a key into the image
+
+For environments that cannot inject environment variables, a key can be embedded
+at build time (**off by default**). Prefer runtime `-e` injection; a baked key
+ships inside the image.
+
+```bash
+docker build \
+  --build-arg BAKE_PROVIDER_KEY_ENV=GEMINI_API_KEY \
+  --build-arg BAKE_PROVIDER_KEY=... \
+  -t video-captioning-agent .
+```
+
+Runtime `-e` values always override a baked key.
 
 ## Docker image
 
@@ -18,6 +118,8 @@ ghcr.io/akay7/amd-act2-track2-video_captioning_agent
 docker pull ghcr.io/akay7/amd-act2-track2-video_captioning_agent:latest
 
 docker run --rm \
+  -e CAPTION_PROVIDER=gemini \
+  -e GEMINI_API_KEY=... \
   -v /path/to/tasks.json:/input/tasks.json:ro \
   -v /path/to/output:/output \
   ghcr.io/akay7/amd-act2-track2-video_captioning_agent:latest
@@ -27,12 +129,6 @@ docker run --rm \
 
 ```bash
 docker build -t video-captioning-agent .
-```
-
-Override the ROCm wheel channel to match your host's ROCm version if needed:
-
-```bash
-docker build --build-arg ROCM_INDEX=https://download.pytorch.org/whl/rocm6.3 -t video-captioning-agent .
 ```
 
 ## Testing
@@ -47,27 +143,32 @@ result's `captions` object must contain a **non-empty string for every requested
 style**. The contract is defined once in `validation.py`, which the tests and the
 runtime self-check in `main.py` both use.
 
-### Contract test (fast, no GPU/Docker)
+### Fast tests (no Docker, no network, no keys)
 
-Validates good and bad `results.json` fixtures against the contract. Runs anywhere:
+The contract test validates good/bad `results.json` fixtures; the provider test
+stubs the SDKs to check provider selection, the missing-key and unknown-provider
+errors, and style-subset parsing. Both run anywhere:
 
 ```bash
 python tests/test_contract.py
+python tests/test_providers.py
 # or, if pytest is installed:
-python -m pytest tests/test_contract.py
+python -m pytest tests/test_contract.py tests/test_providers.py
 ```
 
-### End-to-end container test (Docker + AMD GPU)
+### End-to-end container test (Docker + network + API key)
 
 Runs the built image against a fixture task and asserts the container exits 0 and
 writes a `results.json` that satisfies the contract. It is **skipped unless
-`RUN_E2E=1`**, and needs Docker, an AMD ROCm GPU, and network access to download
-the fixture clip:
+`RUN_E2E=1`**, and needs Docker, network egress, and a valid provider API key:
 
 ```bash
-RUN_E2E=1 IMAGE=ghcr.io/akay7/amd-act2-track2-video_captioning_agent:latest \
+RUN_E2E=1 \
+  IMAGE=ghcr.io/akay7/amd-act2-track2-video_captioning_agent:latest \
+  CAPTION_PROVIDER=gemini GEMINI_API_KEY=... \
   python tests/run_e2e.py
 ```
 
 Environment overrides: `IMAGE` (image tag), `E2E_TASKS` (tasks fixture path),
-`DOCKER_GPU_FLAGS` (GPU `docker run` flags), `E2E_TIMEOUT` (max run seconds).
+`CAPTION_PROVIDER` and its `*_API_KEY`, `DOCKER_RUN_FLAGS` (extra `docker run`
+flags), `E2E_TIMEOUT` (max run seconds).
