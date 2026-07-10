@@ -28,10 +28,15 @@ import pandas as pd
 from main import process_task
 from providers import ALL_STYLES, get_provider
 
-MAX_VIDEO_MB = int(os.environ.get("DEMO_MAX_VIDEO_MB", "200"))
+MAX_VIDEO_MB = int(os.environ.get("DEMO_MAX_VIDEO_MB", "50"))
 MAX_BATCH_TASKS = int(os.environ.get("DEMO_MAX_BATCH_TASKS", "10"))
 MAX_REQUESTS_PER_SESSION = int(os.environ.get("DEMO_MAX_REQUESTS_PER_SESSION", "20"))
-MAX_PARALLEL_TASKS = int(os.environ.get("DEMO_MAX_PARALLEL_TASKS", "4"))
+# Sequential by default: Render's free tier caps the whole process at 512MB,
+# and each concurrent task holds its own downloaded clip, ffmpeg-decoded
+# frames, and base64-encoded payload in memory at once — 4-way parallelism
+# OOM-killed the service on real 4K sample clips with a frame-based provider
+# (openai/anthropic). Raise via env var only on a host with real headroom.
+MAX_PARALLEL_TASKS = int(os.environ.get("DEMO_MAX_PARALLEL_TASKS", "1"))
 
 PROVIDERS = ["gemini", "openai", "anthropic"]
 
@@ -149,10 +154,11 @@ def caption_batch(tasks_file: str, provider_name: str, api_key: str, base_url: s
     failed = []
     completed = 0
 
+    parallel_note = "one at a time" if workers == 1 else f"up to {workers} in parallel"
     yield (
         None, None,
-        f"Running {total} task(s), up to {workers} in parallel… (large/high-res "
-        f"clips can take a minute or more each — the page isn't frozen)",
+        f"Running {total} task(s), {parallel_note}… (large/high-res clips can "
+        f"take a minute or more each — the page isn't frozen)",
         count,
     )
 
