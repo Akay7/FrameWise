@@ -105,10 +105,12 @@ docker run --rm \
   <image>
 ```
 
-Tasks run concurrently, up to `MAX_PARALLEL_TASKS` at once (default **10**;
-unlike the Render demo above, the container isn't pinned to a shared
-512MB instance, so it defaults to real parallelism). Lower it with
-`-e MAX_PARALLEL_TASKS=1` on a memory-constrained host.
+Tasks run concurrently, up to `MAX_PARALLEL_TASKS` at once (default **2**,
+matching a typical 2 vCPU grading/host budget). Frame-based providers
+(openai/anthropic) run ffmpeg per task, which decodes truly in parallel
+across tasks and competes for the same CPU/memory — higher values can
+OOM on long clips under a constrained memory limit. Raise it with
+`-e MAX_PARALLEL_TASKS=N` only on a host with real CPU/memory headroom.
 
 ### Run locally (no Docker, no interface)
 

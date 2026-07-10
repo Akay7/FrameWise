@@ -34,9 +34,13 @@ logger = logging.getLogger(__name__)
 
 INPUT_PATH = os.environ.get("INPUT_PATH", "/input/tasks.json")
 OUTPUT_PATH = os.environ.get("OUTPUT_PATH", "/output/results.json")
-# The container has no shared-instance memory cap (unlike the Render demo,
-# see app.py's DEMO_MAX_PARALLEL_TASKS), so it defaults to real parallelism.
-MAX_PARALLEL_TASKS = int(os.environ.get("MAX_PARALLEL_TASKS", "10"))
+# Frame-based providers run ffmpeg per task (subprocess, releases the GIL),
+# so concurrent tasks decode truly in parallel and compete for the same
+# CPU/memory budget. Defaults to 2 to match the grading environment's 2 vCPU
+# cap — higher values OOM on long (~2.5min) 4K clips at MAX_PARALLEL_TASKS=10
+# (verified: 10-way concurrency on 2 vCPU/4GB killed ffmpeg mid-decode for
+# some tasks). Raise via env var only on a host with more CPU/memory headroom.
+MAX_PARALLEL_TASKS = int(os.environ.get("MAX_PARALLEL_TASKS", "2"))
 
 
 def _load_baked_env() -> None:
