@@ -1,4 +1,4 @@
-"""Pluggable external caption providers.
+"""FrameWise — pluggable external caption providers.
 
 `main.py` depends only on the `CaptionProvider` protocol and `get_provider`,
 so swapping between Gemini / OpenAI / Anthropic is an env-var change, not a code
@@ -147,11 +147,11 @@ class GeminiProvider:
 
     supports_video = True
 
-    def __init__(self):
+    def __init__(self, api_key: str = None, **_ignored):
         from google import genai  # noqa: F401  (import-time availability check)
 
         self._genai = genai
-        self._client = genai.Client(api_key=_require_key("GEMINI_API_KEY"))
+        self._client = genai.Client(api_key=api_key or _require_key("GEMINI_API_KEY"))
         self._model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
     def caption_clip(self, clip_path: str, duration: float, styles: list) -> dict:
@@ -183,21 +183,24 @@ class OpenAIProvider:
 
     supports_video = False
 
-    def __init__(self):
+    def __init__(self, api_key: str = None, base_url: str = None, model: str = None,
+                 **_ignored):
         from openai import OpenAI
 
-        # OPENAI_BASE_URL lets this adapter target any OpenAI-compatible server,
+        # base_url lets this adapter target any OpenAI-compatible server,
         # including a local one (Lemonade, vLLM, LM Studio, Ollama). Local
         # servers don't need a real key, so only require one for the cloud API.
-        base_url = os.environ.get("OPENAI_BASE_URL", "").strip() or None
-        if base_url:
-            api_key = os.environ.get("OPENAI_API_KEY", "").strip() or "local"
+        base_url = base_url or os.environ.get("OPENAI_BASE_URL", "").strip() or None
+        if api_key:
+            resolved_key = api_key
+        elif base_url:
+            resolved_key = os.environ.get("OPENAI_API_KEY", "").strip() or "local"
         else:
-            api_key = _require_key("OPENAI_API_KEY")
+            resolved_key = _require_key("OPENAI_API_KEY")
         self._client = OpenAI(
-            api_key=api_key, base_url=base_url, timeout=REQUEST_TIMEOUT
+            api_key=resolved_key, base_url=base_url, timeout=REQUEST_TIMEOUT
         )
-        self._model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        self._model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
 
     def caption_clip(self, clip_path: str, duration: float, styles: list) -> dict:
         prompt = build_prompt(styles, video_native=False)
@@ -225,11 +228,12 @@ class AnthropicProvider:
 
     supports_video = False
 
-    def __init__(self):
+    def __init__(self, api_key: str = None, **_ignored):
         from anthropic import Anthropic
 
         self._client = Anthropic(
-            api_key=_require_key("ANTHROPIC_API_KEY"), timeout=REQUEST_TIMEOUT
+            api_key=api_key or _require_key("ANTHROPIC_API_KEY"),
+            timeout=REQUEST_TIMEOUT,
         )
         self._model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
@@ -269,8 +273,14 @@ _PROVIDERS = {
 }
 
 
-def get_provider(name: str = None):
+def get_provider(name: str = None, api_key: str = None, base_url: str = None,
+                  model: str = None):
     """Instantiate the configured provider adapter.
+
+    `api_key`/`base_url`/`model` are optional explicit overrides (used by the
+    demo app, where a visitor supplies their own credentials per request);
+    when omitted, each adapter falls back to its usual environment variable,
+    so the container's `get_provider()` call is unaffected.
 
     Raises SystemExit on an unknown provider or a missing key, so the run fails
     loudly at startup rather than emitting empty captions.
@@ -282,4 +292,4 @@ def get_provider(name: str = None):
             f"ERROR: unknown CAPTION_PROVIDER '{name}'. Supported: {supported}."
         )
     print(f"Caption provider: {name}")
-    return _PROVIDERS[name]()
+    return _PROVIDERS[name](api_key=api_key, base_url=base_url, model=model)

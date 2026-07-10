@@ -1,4 +1,4 @@
-"""Track 2 — Video Captioning Agent.
+"""FrameWise — Track 2 — Video Captioning Agent.
 
 Reads /input/tasks.json, generates a caption per requested style for every clip
 by calling an external vision model, and writes /output/results.json.

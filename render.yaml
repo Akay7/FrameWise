@@ -1,11 +1,8 @@
 services:
   - type: web
-    name: video-captioning-agent-demo
+    name: framewise-demo
     runtime: docker
     dockerfilePath: ./Dockerfile.demo
     plan: free
-    envVars:
-      - key: CAPTION_PROVIDER
-        value: gemini
-      - key: GEMINI_API_KEY
-        sync: false
+    # No provider secrets needed: visitors supply their own API key via the
+    # app's UI (see app.py). PORT is injected by Render automatically.

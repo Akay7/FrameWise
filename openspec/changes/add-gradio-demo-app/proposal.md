@@ -17,9 +17,22 @@ batch CLI/container (`main.py` reading `/input/tasks.json`, writing
     `sample_tasks.json` (`task_id`, `video_url`, `styles`); runs every task
     through the pipeline and displays a results table (same shape as
     `results.json`), downloadable as JSON.
-- Caption provider is selected via the same `CAPTION_PROVIDER` /
-  `*_API_KEY` environment variables the container already uses — the app
-  does not introduce a new provider path, it reuses `providers.py` directly.
+- **Each visitor supplies their own API key.** The UI adds a provider
+  dropdown (gemini/openai/anthropic) and a password-style API key field;
+  the app calls `providers.get_provider(name, api_key)` with that
+  per-request key and never reads a provider key from server environment
+  variables. This removes the original design's shared-key risk (one
+  public key absorbing every visitor's usage/cost) entirely, at the cost of
+  requiring each visitor to bring their own key. `providers.py` gains
+  optional `api_key`/`base_url`/`model` parameters on `get_provider`/each
+  adapter, defaulting to the existing env-var lookups so `main.py`/the
+  container are unaffected.
+- **When `openai` is selected, expose optional Base URL and Model fields**
+  (mirroring the existing `OPENAI_BASE_URL`/`OPENAI_MODEL` env vars). This
+  lets a visitor point the demo at their own OpenAI-compatible endpoint
+  (e.g. a locally-run Lemonade/vLLM/LM Studio server they've exposed) —
+  and per the existing adapter logic, the API key becomes optional in that
+  case (local servers accept a placeholder key).
 - Deploy the app to **Render** (free web service, Docker) as the demo
   platform; the service's public URL becomes the submission's Application URL.
   (Hugging Face Spaces was the original target, but its free tier now gates
@@ -43,14 +56,17 @@ batch CLI/container (`main.py` reading `/input/tasks.json`, writing
 ## Impact
 
 - **Code**: new `app.py` (Gradio UI, imports `providers.py` and reuses
-  `media.py` helpers for video download/frame extraction); no changes to
-  `main.py`, `providers.py`, or `validation.py`.
+  `media.py` helpers for video download/frame extraction); `providers.py`
+  gains an optional `api_key` parameter (backward-compatible — `main.py`
+  and `validation.py` are otherwise unchanged).
 - **Dependencies**: add `gradio` to `pyproject.toml` (demo-only dependency)
   and a `requirements.txt` for the demo's own Docker build; the graded
   `Dockerfile`/image is unaffected — it does not COPY `app.py` or
   `requirements.txt`.
 - **Hosting**: new `Dockerfile.demo` + `render.yaml`, deployed as a Render
-  free web service, requires the same `CAPTION_PROVIDER` / provider API key
-  set as Render environment variables/secrets.
-- **Docs**: `README.md` gains a Demo section with the Render URL and usage
-  instructions for both input modes.
+  free web service. No provider API key needs to be configured on Render —
+  visitors supply their own key per request, so the service itself holds
+  no secrets.
+- **Docs**: `README.md` gains a Demo section with the Render URL, usage
+  instructions for both input modes, and a note that visitors need their
+  own provider API key.

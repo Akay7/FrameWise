@@ -1,4 +1,4 @@
-"""Output-contract validator for the Track 2 agent.
+"""FrameWise — output-contract validator for the Track 2 agent.
 
 Single source of truth for what a valid ``results.json`` looks like, per the
 hackathon contract:

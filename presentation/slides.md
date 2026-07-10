@@ -416,6 +416,33 @@ Same three clips, four voices each — one model call per clip.
 
 ---
 
+## Try It Yourself: Live Demo
+
+The same pipeline, behind a URL — no Docker, no CLI, nothing to install.
+
+<div class="cols">
+<div class="col">
+
+**Two tabs, one pipeline**
+- **Single video** — upload a file or paste a URL, pick styles, caption it
+- **Batch** — upload a `tasks.json` shaped like `sample_tasks.json`, get a downloadable `results.json`
+- Built on `app.py`, a thin Gradio UI over the exact same `providers.py` / `main.run_tasks` the container uses
+
+</div>
+<div class="col">
+
+**Bring your own key**
+- Pick a provider, paste your own API key — used only in-memory for that request, never stored or logged
+- No shared demo key to exhaust or leak
+- `openai` also accepts a custom Base URL/Model, so you can point the demo at your own local server (Lemonade, vLLM, ...)
+
+</div>
+</div>
+
+<p class="footline center">Deployed on Render (free tier, Docker) — see README.md for the live URL</p>
+
+---
+
 <!-- _class: title -->
 
 <span class="kicker">Status</span>

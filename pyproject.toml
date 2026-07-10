@@ -1,5 +1,5 @@
 [project]
-name = "video-captioning-agent"
+name = "framewise"
 version = "3.0.0"
 requires-python = ">=3.10"
 # Pure external captioning: no local model, no torch/GPU stack. The container

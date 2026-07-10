@@ -1,4 +1,6 @@
-# Track 2 — Video Captioning Agent
+# FrameWise
+
+*Track 2 — Video Captioning Agent*
 
 Reads `/input/tasks.json`, generates a caption per requested style for every clip
 by calling a hosted vision model, and writes `/output/results.json`. No local
@@ -19,15 +21,24 @@ logic is duplicated. Two tabs:
   (`task_id`, `video_url`, `styles`), run every task, view the results table,
   and download a `results.json` matching the container's output contract.
 
-The provider is selected the same way as the container — `CAPTION_PROVIDER`
-plus the matching `*_API_KEY` — there is no key-entry field in the UI.
+Each visitor picks a provider and enters **their own API key** in the UI —
+the app never reads a provider key from the server environment, so there's
+nothing to leak or exhaust on a shared key. The key is used only in-memory
+for that request and is never logged or stored. Selecting `openai` also
+reveals optional **Base URL** / **Model** fields (mirroring the container's
+`OPENAI_BASE_URL`/`OPENAI_MODEL`), so you can point the demo at your own
+OpenAI-compatible server (e.g. a local Lemonade instance) — in that case the
+API key field can be left blank.
 
 ### Run the demo locally
 
 ```bash
 pip install -r requirements.txt   # gradio + provider SDKs (needs ffmpeg on PATH)
-CAPTION_PROVIDER=gemini GEMINI_API_KEY=... python app.py
+python app.py
 ```
+
+Then open the local URL it prints and enter your own provider API key in
+the UI — no environment variables required to start it.
 
 ### Deploy to Render (free tier)
 
@@ -40,18 +51,17 @@ Render deploy — no credit card required on Render's free plan.
    (service: Docker runtime, `Dockerfile.demo`, free plan). Alternatively,
    **New → Web Service**, select **Docker**, and set the Dockerfile path to
    `Dockerfile.demo` manually.
-3. Set `CAPTION_PROVIDER` and the matching `<PROVIDER>_API_KEY` in the
-   service's **Environment** tab (the `render.yaml` declares `GEMINI_API_KEY`
-   as a secret you fill in on the dashboard; add others if using a different
-   provider).
-4. Once it builds, the service's public URL (`https://<name>.onrender.com`)
-   is the demo's Application URL. The free plan spins the service down after
+3. No provider secret to configure — visitors supply their own API key in
+   the UI, so the service holds no credentials.
+4. Once it builds, the service's public URL — `render.yaml` names the
+   service `framewise-demo`, so `https://framewise-demo.onrender.com` — is
+   the demo's Application URL. The free plan spins the service down after
    ~15 minutes idle, so the first request after a gap takes 30-50s to wake up.
 
 Demo-only guardrails (env vars, all optional): `DEMO_MAX_VIDEO_MB` (default
 200), `DEMO_MAX_BATCH_TASKS` (default 10), `DEMO_MAX_REQUESTS_PER_SESSION`
-(default 20) — protect the shared demo provider key from a runaway upload or
-quota exhaustion.
+(default 20) — protect the shared free-tier compute this demo runs on from a
+runaway upload or a single session hogging the instance.
 
 ## Caption providers
 
@@ -126,7 +136,7 @@ variant); text-only models can't caption frames.
      -e OPENAI_MODEL=<vision-model> \
      -v "$PWD/sample_tasks.json:/input/tasks.json:ro" \
      -v "$PWD/out:/output" \
-     video-captioning-agent
+     framewise
    ```
 
    (On macOS/Windows Docker Desktop use `http://host.docker.internal:8000/api/v1`
@@ -145,7 +155,7 @@ ships inside the image.
 docker build \
   --build-arg BAKE_PROVIDER_KEY_ENV=GEMINI_API_KEY \
   --build-arg BAKE_PROVIDER_KEY=... \
-  -t video-captioning-agent .
+  -t framewise .
 ```
 
 Runtime `-e` values always override a baked key.
@@ -159,6 +169,11 @@ ghcr.io/akay7/amd-act2-track2-video_captioning_agent
 ```
 
 (Docker/OCI image names must be lowercase, so the repository's `Akay7/AMD-ACT2-track2-video_captioning_agent` path is lowercased by the workflow.) Available tags: `latest` (default branch), the branch name, `sha-<commit>`, and semver tags (`X.Y.Z`, `X.Y`) for `v*` releases.
+
+*The image path above is derived automatically from the GitHub repository
+name and is accurate today. Once the repository is renamed to `FrameWise`,
+the same workflow publishes to `ghcr.io/akay7/framewise` with no code
+change — this doc will be updated to match at that point.*
 
 ### Pull and run
 
@@ -176,7 +191,7 @@ docker run --rm \
 ### Build locally
 
 ```bash
-docker build -t video-captioning-agent .
+docker build -t framewise .
 ```
 
 ## Testing

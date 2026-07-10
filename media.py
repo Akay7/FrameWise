@@ -1,4 +1,4 @@
-"""Shared media helpers: download a clip and sample frames from it.
+"""FrameWise — shared media helpers: download a clip and sample frames from it.
 
 Kept provider-agnostic so both the orchestrator (which downloads the clip) and
 the frame-based provider adapters (which sample frames) can reuse them.
