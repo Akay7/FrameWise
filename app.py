@@ -1,7 +1,7 @@
 """FrameWise — Gradio demo (Track 2 — Video Captioning Agent).
 
 Thin UI over the same pipeline the container uses (`providers.get_provider`,
-`main.run_tasks`) — no captioning logic lives here. Two tabs:
+`main.process_task`) — no captioning logic lives here. Two tabs:
 
   * Single video: upload a file or paste a URL, pick styles, caption it.
   * Batch tasks file: upload a tasks.json shaped like sample_tasks.json,
@@ -17,18 +17,20 @@ visitor can point the demo at their own OpenAI-compatible server (e.g. a
 local Lemonade instance) with no real key required.
 """
 
+import concurrent.futures
 import json
 import os
 import tempfile
 
 import gradio as gr
 
-from main import run_tasks
+from main import process_task
 from providers import ALL_STYLES, get_provider
 
 MAX_VIDEO_MB = int(os.environ.get("DEMO_MAX_VIDEO_MB", "200"))
 MAX_BATCH_TASKS = int(os.environ.get("DEMO_MAX_BATCH_TASKS", "10"))
 MAX_REQUESTS_PER_SESSION = int(os.environ.get("DEMO_MAX_REQUESTS_PER_SESSION", "20"))
+MAX_PARALLEL_TASKS = int(os.environ.get("DEMO_MAX_PARALLEL_TASKS", "4"))
 
 PROVIDERS = ["gemini", "openai", "anthropic"]
 
@@ -88,17 +90,21 @@ def caption_single(video_file: str, video_url: str, styles: list,
     else:
         source = video_url.strip()
 
-    yield "Running caption pipeline…", count
+    yield (
+        "Downloading and captioning… this can take up to a minute or two for "
+        "large or high-resolution clips (longer still if the provider needs a "
+        "retry) — the page isn't frozen.",
+        count,
+    )
 
     task = {"task_id": "demo", "video_url": source, "styles": styles}
-    results, failed = run_tasks([task], provider)
-    captions = results[0]["captions"]
-
-    if failed:
+    try:
+        captions = process_task(task, provider)["captions"]
+    except Exception as e:  # noqa: BLE001
         raise gr.Error(
-            "The caption provider failed on this clip — check your API key and "
-            "settings."
-        )
+            f"The caption provider failed on this clip — check your API key and "
+            f"settings. ({e})"
+        ) from e
 
     body = "\n\n".join(f"**{style}**\n\n{captions.get(style, '')}" for style in styles)
     yield body, count + 1
@@ -129,15 +135,48 @@ def caption_batch(tasks_file: str, provider_name: str, api_key: str, base_url: s
         if not isinstance(task, dict) or not task.get("video_url"):
             raise gr.Error(f"tasks[{i}] is missing 'video_url'.")
 
-    yield None, None, "Running caption pipeline…", count
+    total = len(tasks)
+    workers = min(total, MAX_PARALLEL_TASKS)
+    results: list = [None] * total
+    rows: list = [None] * total
+    failed = []
+    completed = 0
 
-    results, failed = run_tasks(tasks, provider)
+    yield (
+        None, None,
+        f"Running {total} task(s), up to {workers} in parallel… (large/high-res "
+        f"clips can take a minute or more each — the page isn't frozen)",
+        count,
+    )
 
-    rows = []
-    for res in results:
-        row = {"task_id": res["task_id"]}
-        row.update(res["captions"])
-        rows.append(row)
+    def _run(task):
+        return process_task(task, provider)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_index = {
+            executor.submit(_run, task): i for i, task in enumerate(tasks)
+        }
+        for future in concurrent.futures.as_completed(future_to_index):
+            i = future_to_index[future]
+            task = tasks[i]
+            task_id = task.get("task_id", "unknown")
+            task_styles = task.get("styles") or ALL_STYLES
+            try:
+                res = future.result()
+            except Exception as e:  # noqa: BLE001
+                print(f"ERROR on task {task_id}: {e}")
+                failed.append(task_id)
+                res = {"task_id": task_id, "captions": {s: "" for s in task_styles}}
+            results[i] = res
+            row = {"task_id": res["task_id"]}
+            row.update(res["captions"])
+            rows[i] = row
+            completed += 1
+            yield (
+                [r for r in rows if r is not None], None,
+                f"Completed {completed}/{total}: {task_id}",
+                count,
+            )
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, prefix="results_"
@@ -145,7 +184,7 @@ def caption_batch(tasks_file: str, provider_name: str, api_key: str, base_url: s
         json.dump(results, f, indent=2, ensure_ascii=False)
         out_path = f.name
 
-    status = f"Done: {len(results)} task(s), {len(failed)} failed."
+    status = f"Done: {total} task(s), {len(failed)} failed."
     yield rows, out_path, status, count + 1
 
 

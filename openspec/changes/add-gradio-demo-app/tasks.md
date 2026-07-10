@@ -53,3 +53,12 @@
 - [x] 8.6 When `openai` is selected, show optional Base URL / Model textboxes wired to `get_provider(..., base_url=, model=)`; make the API key field optional when a Base URL is set (mirrors the container's local-server handling)
 - [x] 8.7 Update `README.md`'s Demo section: visitors bring their own provider API key (and optionally a Base URL/Model for `openai`); remove any remaining mention of configuring a provider secret on Render
 - [x] 8.8 Re-run local smoke tests (`tests/test_providers.py`, and the stub-provider batch/single-video checks) against the refactored `get_provider` signature
+
+## 9. Progress feedback (found via live testing on Render)
+
+Live testing on the deployed Render URL (batch tab, real 4K sample clips) surfaced a UX bug: both tabs yielded a single "Running caption pipeline…" status at the start and then nothing until the entire run finished, which for a multi-task batch on a slow free-tier instance looked indistinguishable from a hang.
+
+- [x] 9.1 Single-video tab: replace the single generic status message with one that sets time expectations ("this can take up to a minute or two… the page isn't frozen")
+- [x] 9.2 Batch tab: switch from one `run_tasks()` call to a manual per-task loop using `main.process_task`, yielding progress (`Processing i/N: task_id…`, then `Completed i/N`) and partial results as each task finishes, instead of one yield at the very start and one at the end
+- [x] 9.3 Batch tab: run tasks concurrently via `ThreadPoolExecutor` (capped by `DEMO_MAX_PARALLEL_TASKS`, default 4) instead of sequentially — the pipeline is I/O-bound (network download + provider API round-trip), so this cuts real wall-clock time on a multi-task batch, not just perceived time
+- [x] 9.4 Verify: incremental yields observed end-to-end against `sample_tasks.json` with a stub provider (interleaved task logs confirm real concurrency), original task order preserved in both the results table and the downloaded `results.json` despite out-of-order completion, output still passes `validation.validate_results`; `test_contract.py`/`test_providers.py` still pass
