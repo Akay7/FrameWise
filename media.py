@@ -4,14 +4,20 @@ Kept provider-agnostic so both the orchestrator (which downloads the clip) and
 the frame-based provider adapters (which sample frames) can reuse them.
 """
 
+import glob
 import os
 import shutil
 import subprocess
 
 import requests
 
-NUM_FRAMES = int(os.environ.get("NUM_FRAMES", "12"))
+# Rate-based sampling (one frame every FRAME_INTERVAL_SECONDS) rather than a
+# fixed frame count: shorter clips cost less to process/transmit, and
+# MAX_FRAMES caps a pathologically long clip from ballooning memory/payload
+# size on a constrained host.
+FRAME_INTERVAL_SECONDS = float(os.environ.get("FRAME_INTERVAL_SECONDS", "4"))
 FRAME_LONG_SIDE = int(os.environ.get("FRAME_LONG_SIDE", "512"))
+MAX_FRAMES = int(os.environ.get("MAX_FRAMES", "30"))
 
 
 def download_video(url: str, dest_dir: str) -> str:
@@ -56,31 +62,25 @@ def probe_duration(video_path: str) -> float:
 
 
 def extract_frames(
-    video_path: str, out_dir: str, num_frames: int = NUM_FRAMES,
-    duration: float = 0.0,
+    video_path: str, out_dir: str,
+    interval_seconds: float = FRAME_INTERVAL_SECONDS, max_frames: int = MAX_FRAMES,
 ) -> list:
-    """Extract `num_frames` interior-sampled frames, downscaled on the long side."""
+    """Extract one frame every `interval_seconds`, downscaled on the long
+    side, in a single ffmpeg pass (cheaper than one subprocess per frame),
+    capped at `max_frames` total.
+    """
     os.makedirs(out_dir, exist_ok=True)
-    if duration <= 0:
-        duration = probe_duration(video_path)
-    if duration <= 0:
-        duration = 60.0
-
-    # Sample at interior timestamps to avoid black lead-in / trailing frames.
-    frame_paths = []
-    for i in range(num_frames):
-        ts = duration * (i + 0.5) / num_frames
-        frame_path = os.path.join(out_dir, f"frame_{i:04d}.jpg")
-        subprocess.run(
-            [
-                "ffmpeg", "-v", "error",
-                "-ss", f"{ts:.2f}", "-i", video_path,
-                "-frames:v", "1",
-                "-vf", f"scale='min({FRAME_LONG_SIDE},iw)':-2",
-                "-q:v", "3", "-y", frame_path,
-            ],
-            capture_output=True,
-        )
-        if os.path.exists(frame_path) and os.path.getsize(frame_path) > 0:
-            frame_paths.append(frame_path)
-    return frame_paths
+    fps = 1.0 / interval_seconds
+    pattern = os.path.join(out_dir, "frame_%04d.jpg")
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error",
+            "-i", video_path,
+            "-vf", f"fps={fps},scale='min({FRAME_LONG_SIDE},iw)':-2",
+            "-frames:v", str(max_frames),
+            "-q:v", "3", "-y", pattern,
+        ],
+        capture_output=True,
+    )
+    frame_paths = sorted(glob.glob(os.path.join(out_dir, "frame_*.jpg")))
+    return [p for p in frame_paths if os.path.getsize(p) > 0]

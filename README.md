@@ -33,9 +33,13 @@ API key field can be left blank.
 ### Run the demo locally
 
 ```bash
-pip install -r requirements.txt   # gradio + provider SDKs (needs ffmpeg on PATH)
-python app.py
+uv sync --extra demo   # or: pip install -r requirements.txt
+uv run python app.py   # or: python app.py, if you used pip install
 ```
+
+`ffmpeg` must be on PATH. Note the `--extra demo` (or `requirements.txt`) —
+`app.py` needs `gradio`/`pandas` on top of the base container dependencies,
+so a plain `uv sync` / `pip install .` is not enough to run it.
 
 Then open the local URL it prints and enter your own provider API key in
 the UI — no environment variables required to start it.
@@ -59,9 +63,13 @@ Render deploy — no credit card required on Render's free plan.
    ~15 minutes idle, so the first request after a gap takes 30-50s to wake up.
 
 Demo-only guardrails (env vars, all optional): `DEMO_MAX_VIDEO_MB` (default
-200), `DEMO_MAX_BATCH_TASKS` (default 10), `DEMO_MAX_REQUESTS_PER_SESSION`
+50), `DEMO_MAX_BATCH_TASKS` (default 10), `DEMO_MAX_REQUESTS_PER_SESSION`
 (default 20) — protect the shared free-tier compute this demo runs on from a
-runaway upload or a single session hogging the instance.
+runaway upload or a single session hogging the instance. `DEMO_MAX_PARALLEL_TASKS`
+(default **1**) caps how many batch tasks run concurrently; it's kept at 1
+because Render's free tier is capped at 512MB and each concurrent task holds
+a downloaded clip, decoded frames, and its base64 payload in memory at once —
+raise it only on a host with real headroom (e.g. when running locally).
 
 ## Caption providers
 
@@ -77,7 +85,9 @@ Each clip is captioned in a **single call** that returns one caption per
 requested style as JSON. Optional overrides: `GEMINI_MODEL` / `OPENAI_MODEL` /
 `ANTHROPIC_MODEL`, `OPENAI_BASE_URL` (point the `openai` provider at any
 OpenAI-compatible server — see [Run locally with Lemonade](#run-locally-with-lemonade-no-cloud-no-key)),
-`NUM_FRAMES`, `FRAME_LONG_SIDE`, `REQUEST_TIMEOUT`, `MAX_RETRIES`.
+`FRAME_INTERVAL_SECONDS` (default 4 — one sampled frame every N seconds),
+`MAX_FRAMES` (default 30 — hard cap regardless of clip length), `FRAME_LONG_SIDE`,
+`REQUEST_TIMEOUT`, `MAX_RETRIES`.
 
 **Prerequisites at run time:** network egress to the provider and a valid API
 key for the selected provider. If the provider is unreachable or the key is
@@ -93,6 +103,29 @@ docker run --rm \
   -v /path/to/tasks.json:/input/tasks.json:ro \
   -v /path/to/output:/output \
   <image>
+```
+
+### Run locally (no Docker, no interface)
+
+Runs the same `main.py` entrypoint the container runs, straight on the host —
+needs `ffmpeg`/`ffprobe` on PATH (used to probe clip duration and, for the
+frame-based providers, sample frames):
+
+```bash
+uv sync   # or: pip install .
+CAPTION_PROVIDER=gemini GEMINI_API_KEY=... \
+INPUT_PATH=./sample_tasks.json OUTPUT_PATH=./results.json \
+uv run python main.py   # or: python main.py, if you used pip install
+```
+
+### Run locally with an interface (Gradio demo)
+
+Same pipeline, with a browser UI to upload a video/URL or a batch
+`tasks.json` — see [Run the demo locally](#run-the-demo-locally) above.
+
+```bash
+uv sync --extra demo   # or: pip install -r requirements.txt
+uv run python app.py   # or: python app.py
 ```
 
 ### Run locally with Lemonade (no cloud, no key)

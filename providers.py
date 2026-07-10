@@ -22,7 +22,7 @@ import re
 import tempfile
 import time
 
-from media import NUM_FRAMES, extract_frames
+from media import extract_frames
 
 DEFAULT_PROVIDER = "gemini"
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "25"))
@@ -114,9 +114,14 @@ def _retry(fn, what: str):
 
 
 def _b64_frames(clip_path: str, duration: float) -> list:
-    """Sample frames from the clip and return their base64-encoded JPEG bytes."""
+    """Sample frames from the clip and return their base64-encoded JPEG bytes.
+
+    `duration` is unused now that `extract_frames` reads it from the file
+    directly via ffmpeg's `fps` filter; kept in the signature since callers
+    already have it on hand from `probe_duration`.
+    """
     with tempfile.TemporaryDirectory() as frame_dir:
-        paths = extract_frames(clip_path, frame_dir, NUM_FRAMES, duration)
+        paths = extract_frames(clip_path, frame_dir)
         if not paths:
             raise RuntimeError("no frames extracted from clip")
         out = []
