@@ -5,6 +5,7 @@ the frame-based provider adapters (which sample frames) can reuse them.
 """
 
 import os
+import shutil
 import subprocess
 
 import requests
@@ -14,7 +15,19 @@ FRAME_LONG_SIDE = int(os.environ.get("FRAME_LONG_SIDE", "512"))
 
 
 def download_video(url: str, dest_dir: str) -> str:
+    """Fetch a clip into `dest_dir`, from an HTTP(S) URL or a local path.
+
+    The demo app passes the path Gradio saved an upload to (no scheme), so a
+    local path is copied straight through instead of being requested over
+    HTTP — the container's `video_url` inputs are always remote.
+    """
     dest_path = os.path.join(dest_dir, "clip.mp4")
+    if not url.startswith(("http://", "https://")):
+        print(f"Using local file {url}")
+        shutil.copyfile(url, dest_path)
+        print(f"Copied {os.path.getsize(dest_path) / 1e6:.1f} MB")
+        return dest_path
+
     print(f"Downloading {url}")
     with requests.get(url, stream=True, timeout=120) as resp:
         resp.raise_for_status()

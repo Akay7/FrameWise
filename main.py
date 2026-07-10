@@ -65,17 +65,14 @@ def process_task(task: dict, provider) -> dict:
     return {"task_id": task_id, "captions": captions}
 
 
-def main() -> int:
-    start = time.time()
-    _load_baked_env()
-    print(f"Loading tasks from {INPUT_PATH}")
-    with open(INPUT_PATH) as f:
-        tasks = json.load(f)
+def run_tasks(tasks: list, provider) -> tuple:
+    """Run every task through `provider`, never fabricating a caption.
 
-    # Load and validate the provider before touching any task. get_provider
-    # raises SystemExit on an unknown provider or a missing API key.
-    provider = get_provider()
-
+    Shared by main.py (container entrypoint) and app.py (demo UI) so both
+    exercise the exact same per-task pipeline. Returns (results, failed)
+    where `results` has exactly one entry per input task (matched by
+    `task_id`) and `failed` lists the task_ids that errored.
+    """
     results = []
     failed = []
     for task in tasks:
@@ -90,6 +87,21 @@ def main() -> int:
             # Record the task with empty captions — never fabricate text. Keeps
             # the output a well-formed array with one entry per task.
             results.append({"task_id": task_id, "captions": {s: "" for s in styles}})
+    return results, failed
+
+
+def main() -> int:
+    start = time.time()
+    _load_baked_env()
+    print(f"Loading tasks from {INPUT_PATH}")
+    with open(INPUT_PATH) as f:
+        tasks = json.load(f)
+
+    # Load and validate the provider before touching any task. get_provider
+    # raises SystemExit on an unknown provider or a missing API key.
+    provider = get_provider()
+
+    results, failed = run_tasks(tasks, provider)
 
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:

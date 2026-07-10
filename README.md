@@ -5,6 +5,54 @@ by calling a hosted vision model, and writes `/output/results.json`. No local
 model and no GPU are required — the container is a slim Python image that runs
 anywhere with network access.
 
+## Demo
+
+**Live demo:** _TODO — Render URL once deployed (see below)._
+
+`app.py` is a [Gradio](https://gradio.app) UI over the same pipeline the
+container uses (`providers.get_provider`, `main.run_tasks`) — no captioning
+logic is duplicated. Two tabs:
+
+- **Single video**: upload a video file or paste a video URL, pick one or
+  more caption styles, and see the generated caption per style.
+- **Batch tasks file**: upload a `tasks.json` shaped like `sample_tasks.json`
+  (`task_id`, `video_url`, `styles`), run every task, view the results table,
+  and download a `results.json` matching the container's output contract.
+
+The provider is selected the same way as the container — `CAPTION_PROVIDER`
+plus the matching `*_API_KEY` — there is no key-entry field in the UI.
+
+### Run the demo locally
+
+```bash
+pip install -r requirements.txt   # gradio + provider SDKs (needs ffmpeg on PATH)
+CAPTION_PROVIDER=gemini GEMINI_API_KEY=... python app.py
+```
+
+### Deploy to Render (free tier)
+
+The demo ships with `Dockerfile.demo` and `render.yaml` for a one-click
+Render deploy — no credit card required on Render's free plan.
+
+1. Push this repo to GitHub/GitLab (Render deploys from a connected repo).
+2. In the [Render dashboard](https://dashboard.render.com), **New → Blueprint**
+   and point it at the repo — it picks up `render.yaml` automatically
+   (service: Docker runtime, `Dockerfile.demo`, free plan). Alternatively,
+   **New → Web Service**, select **Docker**, and set the Dockerfile path to
+   `Dockerfile.demo` manually.
+3. Set `CAPTION_PROVIDER` and the matching `<PROVIDER>_API_KEY` in the
+   service's **Environment** tab (the `render.yaml` declares `GEMINI_API_KEY`
+   as a secret you fill in on the dashboard; add others if using a different
+   provider).
+4. Once it builds, the service's public URL (`https://<name>.onrender.com`)
+   is the demo's Application URL. The free plan spins the service down after
+   ~15 minutes idle, so the first request after a gap takes 30-50s to wake up.
+
+Demo-only guardrails (env vars, all optional): `DEMO_MAX_VIDEO_MB` (default
+200), `DEMO_MAX_BATCH_TASKS` (default 10), `DEMO_MAX_REQUESTS_PER_SESSION`
+(default 20) — protect the shared demo provider key from a runaway upload or
+quota exhaustion.
+
 ## Caption providers
 
 The provider is chosen at runtime via `CAPTION_PROVIDER`:

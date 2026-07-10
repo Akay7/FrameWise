@@ -1,0 +1,8 @@
+# Hugging Face Spaces (Gradio SDK) dependency file for app.py.
+# Not used by the graded container — Dockerfile installs its own deps
+# explicitly and does not COPY this file.
+gradio
+requests
+google-genai
+openai
+anthropic

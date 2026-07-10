@@ -1,0 +1,21 @@
+# Demo web app (app.py) — separate from the graded Dockerfile/image.
+# Deployed as a Render free web service; binds to $PORT.
+FROM python:3.13-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY app.py main.py media.py providers.py validation.py ./
+
+CMD ["python3", "app.py"]
