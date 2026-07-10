@@ -15,18 +15,28 @@ Design:
     is always well-formed.
 """
 
+import concurrent.futures
 import json
+import logging
 import os
 import sys
 import tempfile
 import time
-import traceback
 
 from media import download_video, probe_duration
 from providers import ALL_STYLES, get_provider
 
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 INPUT_PATH = os.environ.get("INPUT_PATH", "/input/tasks.json")
 OUTPUT_PATH = os.environ.get("OUTPUT_PATH", "/output/results.json")
+# The container has no shared-instance memory cap (unlike the Render demo,
+# see app.py's DEMO_MAX_PARALLEL_TASKS), so it defaults to real parallelism.
+MAX_PARALLEL_TASKS = int(os.environ.get("MAX_PARALLEL_TASKS", "10"))
 
 
 def _load_baked_env() -> None:
@@ -52,16 +62,17 @@ def process_task(task: dict, provider) -> dict:
     video_url = task["video_url"]
     styles = task.get("styles") or ALL_STYLES
 
-    print(f"\n{'=' * 60}\nTask {task_id} | styles={styles}\n{'=' * 60}")
+    logger.info("Task %s | styles=%s", task_id, styles)
     t0 = time.time()
     with tempfile.TemporaryDirectory() as tmp:
         video_path = download_video(video_url, tmp)
         duration = probe_duration(video_path)
+        logger.info("Task %s | probed duration: %.1fs", task_id, duration)
         captions = provider.caption_clip(video_path, duration, styles)
 
-    print(f"Task {task_id} done in {time.time() - t0:.1f}s")
+    logger.info("Task %s done in %.1fs", task_id, time.time() - t0)
     for s in styles:
-        print(f"  [{s}] {captions.get(s, '')[:120]}")
+        logger.info("Task %s | [%s] %s", task_id, s, captions.get(s, "")[:120])
     return {"task_id": task_id, "captions": captions}
 
 
@@ -71,29 +82,37 @@ def run_tasks(tasks: list, provider) -> tuple:
     Shared by main.py (container entrypoint) and app.py (demo UI) so both
     exercise the exact same per-task pipeline. Returns (results, failed)
     where `results` has exactly one entry per input task (matched by
-    `task_id`) and `failed` lists the task_ids that errored.
+    `task_id`) and `failed` lists the task_ids that errored. Tasks run
+    concurrently, up to MAX_PARALLEL_TASKS at once; result order does not
+    matter since callers match entries by `task_id`.
     """
     results = []
     failed = []
-    for task in tasks:
-        task_id = task.get("task_id", "unknown")
-        styles = task.get("styles") or ALL_STYLES
-        try:
-            results.append(process_task(task, provider))
-        except Exception as e:  # noqa: BLE001
-            print(f"ERROR on task {task_id}: {e}")
-            traceback.print_exc()
-            failed.append(task_id)
-            # Record the task with empty captions — never fabricate text. Keeps
-            # the output a well-formed array with one entry per task.
-            results.append({"task_id": task_id, "captions": {s: "" for s in styles}})
+    workers = min(len(tasks), MAX_PARALLEL_TASKS)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_task = {
+            executor.submit(process_task, task, provider): task for task in tasks
+        }
+        for future in concurrent.futures.as_completed(future_to_task):
+            task = future_to_task[future]
+            task_id = task.get("task_id", "unknown")
+            styles = task.get("styles") or ALL_STYLES
+            try:
+                results.append(future.result())
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Task %s failed: %s", task_id, e)
+                failed.append(task_id)
+                # Record the task with empty captions — never fabricate text.
+                # Keeps the output a well-formed array with one entry per task.
+                results.append({"task_id": task_id, "captions": {s: "" for s in styles}})
     return results, failed
 
 
 def main() -> int:
     start = time.time()
     _load_baked_env()
-    print(f"Loading tasks from {INPUT_PATH}")
+    logger.info("Loading tasks from %s", INPUT_PATH)
     with open(INPUT_PATH) as f:
         tasks = json.load(f)
 
@@ -106,8 +125,8 @@ def main() -> int:
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
-    print(f"\nWrote {len(results)} results to {OUTPUT_PATH} "
-          f"({time.time() - start:.1f}s total)")
+    logger.info("Wrote %d results to %s (%.1fs total)",
+                len(results), OUTPUT_PATH, time.time() - start)
 
     # Self-check the output against the contract (warn only).
     try:
@@ -115,16 +134,16 @@ def main() -> int:
 
         errors = validate_results(tasks, results)
         if errors:
-            print("WARNING: output failed the contract self-check:")
+            logger.warning("Output failed the contract self-check:")
             for e in errors:
-                print("  -", e)
+                logger.warning("  - %s", e)
         else:
-            print("Output self-check passed.")
+            logger.info("Output self-check passed.")
     except Exception as e:  # noqa: BLE001
-        print(f"WARNING: could not run output self-check: {e}")
+        logger.warning("Could not run output self-check: %s", e)
 
     if failed:
-        print(f"ERROR: {len(failed)} task(s) failed at the provider: {failed}")
+        logger.error("%d task(s) failed at the provider: %s", len(failed), failed)
         return 1
     return 0
 

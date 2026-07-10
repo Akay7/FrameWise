@@ -17,12 +17,15 @@ Environment:
 
 import base64
 import json
+import logging
 import os
 import re
 import tempfile
 import time
 
 from media import extract_frames
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PROVIDER = "gemini"
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "25"))
@@ -107,8 +110,8 @@ def _retry(fn, what: str):
             last = e
             if attempt < MAX_RETRIES:
                 delay = 2 ** attempt
-                print(f"  {what} failed (attempt {attempt + 1}): {e}; "
-                      f"retrying in {delay}s")
+                logger.warning("%s failed (attempt %d): %s; retrying in %ds",
+                               what, attempt + 1, e, delay)
                 time.sleep(delay)
     raise RuntimeError(f"{what} failed after {MAX_RETRIES + 1} attempts: {last}")
 
@@ -124,6 +127,7 @@ def _b64_frames(clip_path: str, duration: float) -> list:
         paths = extract_frames(clip_path, frame_dir)
         if not paths:
             raise RuntimeError("no frames extracted from clip")
+        logger.info("Encoding %d frame(s) to base64...", len(paths))
         out = []
         for p in paths:
             with open(p, "rb") as f:
@@ -163,6 +167,7 @@ class GeminiProvider:
         prompt = build_prompt(styles, video_native=True)
 
         def _call():
+            logger.info("Uploading clip to Gemini Files API...")
             uploaded = self._client.files.upload(file=clip_path)
             # Wait for the Files API to finish processing the video.
             deadline = time.time() + REQUEST_TIMEOUT
@@ -173,10 +178,12 @@ class GeminiProvider:
                 uploaded = self._client.files.get(name=uploaded.name)
             if getattr(uploaded.state, "name", uploaded.state) == "FAILED":
                 raise RuntimeError("Gemini file processing failed")
+            logger.info("Sending clip + prompt to Gemini (model=%s)...", self._model)
             resp = self._client.models.generate_content(
                 model=self._model,
                 contents=[uploaded, prompt],
             )
+            logger.info("Received response from Gemini")
             return resp.text
 
         text = _retry(_call, "Gemini request")
@@ -218,10 +225,13 @@ class OpenAIProvider:
             })
 
         def _call():
+            logger.info("Sending %d frame(s) + prompt to OpenAI (model=%s)...",
+                        len(frames), self._model)
             resp = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": content}],
             )
+            logger.info("Received response from OpenAI")
             return resp.choices[0].message.content
 
         text = _retry(_call, "OpenAI request")
@@ -257,11 +267,14 @@ class AnthropicProvider:
             })
 
         def _call():
+            logger.info("Sending %d frame(s) + prompt to Anthropic (model=%s)...",
+                        len(frames), self._model)
             resp = self._client.messages.create(
                 model=self._model,
                 max_tokens=1024,
                 messages=[{"role": "user", "content": content}],
             )
+            logger.info("Received response from Anthropic")
             return "".join(
                 block.text for block in resp.content
                 if getattr(block, "type", None) == "text"
@@ -296,5 +309,5 @@ def get_provider(name: str = None, api_key: str = None, base_url: str = None,
         raise SystemExit(
             f"ERROR: unknown CAPTION_PROVIDER '{name}'. Supported: {supported}."
         )
-    print(f"Caption provider: {name}")
+    logger.info("Caption provider: %s", name)
     return _PROVIDERS[name](api_key=api_key, base_url=base_url, model=model)

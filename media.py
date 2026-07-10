@@ -5,11 +5,14 @@ the frame-based provider adapters (which sample frames) can reuse them.
 """
 
 import glob
+import logging
 import os
 import shutil
 import subprocess
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 # Rate-based sampling (one frame every FRAME_INTERVAL_SECONDS) rather than a
 # fixed frame count: shorter clips cost less to process/transmit, and
@@ -29,18 +32,18 @@ def download_video(url: str, dest_dir: str) -> str:
     """
     dest_path = os.path.join(dest_dir, "clip.mp4")
     if not url.startswith(("http://", "https://")):
-        print(f"Using local file {url}")
+        logger.info("Using local file %s", url)
         shutil.copyfile(url, dest_path)
-        print(f"Copied {os.path.getsize(dest_path) / 1e6:.1f} MB")
+        logger.info("Copied %.1f MB", os.path.getsize(dest_path) / 1e6)
         return dest_path
 
-    print(f"Downloading {url}")
+    logger.info("Downloading %s", url)
     with requests.get(url, stream=True, timeout=120) as resp:
         resp.raise_for_status()
         with open(dest_path, "wb") as f:
             for chunk in resp.iter_content(chunk_size=1 << 20):
                 f.write(chunk)
-    print(f"Downloaded {os.path.getsize(dest_path) / 1e6:.1f} MB")
+    logger.info("Downloaded %.1f MB", os.path.getsize(dest_path) / 1e6)
     return dest_path
 
 
@@ -72,6 +75,8 @@ def extract_frames(
     os.makedirs(out_dir, exist_ok=True)
     fps = 1.0 / interval_seconds
     pattern = os.path.join(out_dir, "frame_%04d.jpg")
+    logger.info("Extracting frames (every %ss, long side %spx, max %s)...",
+                interval_seconds, FRAME_LONG_SIDE, max_frames)
     subprocess.run(
         [
             "ffmpeg", "-v", "error",
@@ -83,4 +88,6 @@ def extract_frames(
         capture_output=True,
     )
     frame_paths = sorted(glob.glob(os.path.join(out_dir, "frame_*.jpg")))
-    return [p for p in frame_paths if os.path.getsize(p) > 0]
+    frame_paths = [p for p in frame_paths if os.path.getsize(p) > 0]
+    logger.info("Extracted %d frame(s)", len(frame_paths))
+    return frame_paths

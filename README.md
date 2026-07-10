@@ -105,6 +105,11 @@ docker run --rm \
   <image>
 ```
 
+Tasks run concurrently, up to `MAX_PARALLEL_TASKS` at once (default **10**;
+unlike the Render demo above, the container isn't pinned to a shared
+512MB instance, so it defaults to real parallelism). Lower it with
+`-e MAX_PARALLEL_TASKS=1` on a memory-constrained host.
+
 ### Run locally (no Docker, no interface)
 
 Runs the same `main.py` entrypoint the container runs, straight on the host —
@@ -178,11 +183,16 @@ variant); text-only models can't caption frames.
 Any other OpenAI-compatible local server (vLLM, LM Studio, Ollama) works the same
 way — just change `OPENAI_BASE_URL` and `OPENAI_MODEL`.
 
-### Optional: bake a key into the image
+### Optional: bake provider settings into the image
 
-For environments that cannot inject environment variables, a key can be embedded
-at build time (**off by default**). Prefer runtime `-e` injection; a baked key
-ships inside the image.
+For environments that cannot inject environment variables, provider settings
+can be embedded at build time (**off by default**). Prefer runtime `-e`
+injection; a baked value ships inside the image.
+
+`BAKE_PROVIDER_KEY_ENV` / `BAKE_PROVIDER_KEY` is a generic pair for baking a
+single key under whichever env var name your chosen provider reads
+(`GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`) — one mechanism
+covers all three providers instead of a dedicated `ARG` per provider:
 
 ```bash
 docker build \
@@ -191,7 +201,22 @@ docker build \
   -t framewise .
 ```
 
-Runtime `-e` values always override a baked key.
+The `openai` provider can also take a base URL and model (e.g. to point a
+baked image at a self-hosted server like Lemonade/vLLM), which the generic
+pair can't express since it only carries one `NAME=VALUE`. Use the dedicated
+args instead — they can be combined with each other or with the generic pair
+above:
+
+```bash
+docker build \
+  --build-arg CAPTION_PROVIDER=openai \
+  --build-arg OPENAI_API_KEY=... \
+  --build-arg OPENAI_BASE_URL=http://localhost:13305/api/v1 \
+  --build-arg OPENAI_MODEL=<vision-model> \
+  -t framewise .
+```
+
+Runtime `-e` values always override a baked value.
 
 ## Docker image
 
