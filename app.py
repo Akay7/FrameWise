@@ -23,6 +23,7 @@ import os
 import tempfile
 
 import gradio as gr
+import pandas as pd
 
 from main import process_task
 from providers import ALL_STYLES, get_provider
@@ -110,6 +111,12 @@ def caption_single(video_file: str, video_url: str, styles: list,
     yield body, count + 1
 
 
+def _rows_to_df(rows: list):
+    """gr.Dataframe needs a tabular value — a list of per-row dicts renders as
+    one opaque object per row (Gradio has no way to infer columns from it)."""
+    return pd.DataFrame(rows) if rows else None
+
+
 def caption_batch(tasks_file: str, provider_name: str, api_key: str, base_url: str,
                    model: str, count: int):
     _check_session_cap(count)
@@ -173,7 +180,7 @@ def caption_batch(tasks_file: str, provider_name: str, api_key: str, base_url: s
             rows[i] = row
             completed += 1
             yield (
-                [r for r in rows if r is not None], None,
+                _rows_to_df([r for r in rows if r is not None]), None,
                 f"Completed {completed}/{total}: {task_id}",
                 count,
             )
@@ -185,7 +192,7 @@ def caption_batch(tasks_file: str, provider_name: str, api_key: str, base_url: s
         out_path = f.name
 
     status = f"Done: {total} task(s), {len(failed)} failed."
-    yield rows, out_path, status, count + 1
+    yield _rows_to_df(rows), out_path, status, count + 1
 
 
 with gr.Blocks(title="FrameWise — Demo") as demo:

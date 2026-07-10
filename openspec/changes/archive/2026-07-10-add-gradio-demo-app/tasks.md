@@ -38,8 +38,8 @@
 
 ## 7. Verify and document
 
-- [ ] 7.1 Smoke-test the single-video tab against the live Render URL (upload path and URL path, using a real user-supplied key) — app confirmed live/reachable/correctly-branded via `/config`; a full caption-generation run needs a real provider API key, which isn't available in this environment. Recommend the user runs this manually with their own key.
-- [ ] 7.2 Smoke-test the batch tab against the live Render URL using `sample_tasks.json` — same blocker as 7.1 (needs a real key); equivalent logic already verified locally with a stub provider against `sample_tasks.json`, output passed `validation.validate_results`
+- [x] 7.1 Smoke-test the single-video tab against the live Render URL (upload path and URL path, using a real user-supplied key) — confirmed working by the user with their own API key
+- [x] 7.2 Smoke-test the batch tab against the live Render URL using `sample_tasks.json` — confirmed working by the user with their own API key; the progress-feedback (parallel execution, incremental yields) and Dataframe rendering fixes found during this testing are logged in section 9 below
 - [x] 7.3 Add a "Demo" section to `README.md` with the Render URL and usage instructions for both tabs — live URL confirmed and filled in: `https://framewise-demo.onrender.com/`
 - [x] 7.4 Record the Application URL and Demo Application Platform for the hackathon submission form — **Application URL:** `https://framewise-demo.onrender.com/`; **Demo Application Platform:** Render
 
@@ -62,3 +62,11 @@ Live testing on the deployed Render URL (batch tab, real 4K sample clips) surfac
 - [x] 9.2 Batch tab: switch from one `run_tasks()` call to a manual per-task loop using `main.process_task`, yielding progress (`Processing i/N: task_id…`, then `Completed i/N`) and partial results as each task finishes, instead of one yield at the very start and one at the end
 - [x] 9.3 Batch tab: run tasks concurrently via `ThreadPoolExecutor` (capped by `DEMO_MAX_PARALLEL_TASKS`, default 4) instead of sequentially — the pipeline is I/O-bound (network download + provider API round-trip), so this cuts real wall-clock time on a multi-task batch, not just perceived time
 - [x] 9.4 Verify: incremental yields observed end-to-end against `sample_tasks.json` with a stub provider (interleaved task logs confirm real concurrency), original task order preserved in both the results table and the downloaded `results.json` despite out-of-order completion, output still passes `validation.validate_results`; `test_contract.py`/`test_providers.py` still pass
+
+## 10. Results table rendering (found via local testing with a real API key)
+
+Running a real batch locally surfaced a second bug: the results table showed a single row/column of `[object Object]` instead of the caption data. Root cause: `gr.Dataframe` was fed a list of Python dicts, which it has no way to interpret as columns — it renders each dict as one opaque cell.
+
+- [x] 10.1 Add a `_rows_to_df()` helper that converts the list of per-task row dicts to a `pandas.DataFrame` before passing to `gr.Dataframe`, at both the incremental per-task yield and the final yield
+- [x] 10.2 Add `pandas` as an explicit dependency in `requirements.txt` and `pyproject.toml`'s `demo` extra — it was previously only available transitively via `gradio`, but `app.py` now imports it directly
+- [x] 10.3 Verify: `gr.Dataframe.postprocess()` compared directly for list-of-dicts (broken: `headers=['1']`, cell holds the raw dict) vs `pandas.DataFrame` (correct: `headers=['task_id', 'formal', ...]`, one value per cell); re-ran the stub-provider batch check against `sample_tasks.json` end-to-end confirming a proper `pandas.DataFrame` output; `test_contract.py`/`test_providers.py` still pass; user confirmed fixed against the live Render app

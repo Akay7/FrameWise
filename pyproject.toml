@@ -15,4 +15,5 @@ dependencies = [
 # Demo web app (app.py), not required by the graded container.
 demo = [
     "gradio",
+    "pandas",
 ]

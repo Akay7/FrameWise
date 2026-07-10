@@ -2,6 +2,7 @@
 # Not used by the graded container — Dockerfile installs its own deps
 # explicitly and does not COPY this file.
 gradio
+pandas
 requests
 google-genai
 openai
