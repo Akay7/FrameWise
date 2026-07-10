@@ -245,7 +245,7 @@ The original design baked **Qwen2.5-VL-3B + a ROCm/torch stack** into the image 
 
 - One `CaptionProvider` protocol, one method: `caption_clip(path, duration, styles)`
 - Gemini gets the whole clip natively — best temporal grounding
-- OpenAI/Anthropic reuse the same ffmpeg frame sampler: 12 interior-sampled frames, downscaled to 512px
+- OpenAI/Anthropic reuse the same ffmpeg frame sampler: rate-based (one frame every 4s, capped at 30), downscaled to 512px — a single ffmpeg pass, not one process per frame
 
 ---
 
@@ -328,7 +328,7 @@ The agent never guesses. It either produces a real, grounded caption — or it f
 
 **CI/CD**
 - GitHub Actions builds + publishes on every push to `main` and every `v*` tag
-- Target: `ghcr.io/akay7/amd-act2-track2-video_captioning_agent`
+- Target: `ghcr.io/akay7/framewise`
 - Tags: `latest`, branch name, `sha-<commit>`, semver
 
 ```bash
@@ -337,7 +337,7 @@ docker run --rm \
   -e GEMINI_API_KEY=... \
   -v tasks.json:/input/tasks.json:ro \
   -v ./out:/output \
-  ghcr.io/.../video-captioning-agent
+  ghcr.io/.../framewise
 ```
 
 </div>
@@ -439,7 +439,7 @@ The same pipeline, behind a URL — no Docker, no CLI, nothing to install.
 </div>
 </div>
 
-<p class="footline center">Deployed on Render (free tier, Docker) — see README.md for the live URL</p>
+<p class="footline center">Live now: framewise-demo.onrender.com — Render free tier, Docker</p>
 
 ---
 
@@ -460,4 +460,4 @@ The same pipeline, behind a URL — no Docker, no CLI, nothing to install.
   <div class="step">📦 &lt;&lt; 10GB image</div>
 </div>
 
-<p class="footline center">github.com/Akay7/AMD-ACT2-track2-video_captioning_agent</p>
+<p class="footline center">github.com/Akay7/FrameWise</p>

@@ -198,27 +198,22 @@ Runtime `-e` values always override a baked key.
 Every push to `main` and every `v*` tag automatically builds and publishes the image via GitHub Actions (see `.github/workflows/docker-publish.yml`) to GitHub Container Registry:
 
 ```
-ghcr.io/akay7/amd-act2-track2-video_captioning_agent
+ghcr.io/akay7/framewise
 ```
 
-(Docker/OCI image names must be lowercase, so the repository's `Akay7/AMD-ACT2-track2-video_captioning_agent` path is lowercased by the workflow.) Available tags: `latest` (default branch), the branch name, `sha-<commit>`, and semver tags (`X.Y.Z`, `X.Y`) for `v*` releases.
-
-*The image path above is derived automatically from the GitHub repository
-name and is accurate today. Once the repository is renamed to `FrameWise`,
-the same workflow publishes to `ghcr.io/akay7/framewise` with no code
-change — this doc will be updated to match at that point.*
+(Docker/OCI image names must be lowercase, so the repository's `Akay7/FrameWise` path is lowercased by the workflow.) Available tags: `latest` (default branch), the branch name, `sha-<commit>`, and semver tags (`X.Y.Z`, `X.Y`) for `v*` releases.
 
 ### Pull and run
 
 ```bash
-docker pull ghcr.io/akay7/amd-act2-track2-video_captioning_agent:latest
+docker pull ghcr.io/akay7/framewise:latest
 
 docker run --rm \
   -e CAPTION_PROVIDER=gemini \
   -e GEMINI_API_KEY=... \
   -v /path/to/tasks.json:/input/tasks.json:ro \
   -v /path/to/output:/output \
-  ghcr.io/akay7/amd-act2-track2-video_captioning_agent:latest
+  ghcr.io/akay7/framewise:latest
 ```
 
 ### Build locally
@@ -260,7 +255,7 @@ writes a `results.json` that satisfies the contract. It is **skipped unless
 
 ```bash
 RUN_E2E=1 \
-  IMAGE=ghcr.io/akay7/amd-act2-track2-video_captioning_agent:latest \
+  IMAGE=ghcr.io/akay7/framewise:latest \
   CAPTION_PROVIDER=gemini GEMINI_API_KEY=... \
   python tests/run_e2e.py
 ```
@@ -268,3 +263,17 @@ RUN_E2E=1 \
 Environment overrides: `IMAGE` (image tag), `E2E_TASKS` (tasks fixture path),
 `CAPTION_PROVIDER` and its `*_API_KEY`, `DOCKER_RUN_FLAGS` (extra `docker run`
 flags), `E2E_TIMEOUT` (max run seconds).
+
+## Presentation
+
+`presentation/slides.md` is the pitch deck source ([Marp](https://marp.app)
+markdown); `presentation/slides.pdf` is the rendered, git-ignored output kept
+in sync with it. After editing `slides.md`, regenerate the PDF:
+
+```bash
+npx --yes @marp-team/marp-cli presentation/slides.md \
+  -o presentation/slides.pdf --allow-local-files
+```
+
+`--allow-local-files` is needed because the theme's `<style>` block pulls a
+Google Fonts `@import`.
