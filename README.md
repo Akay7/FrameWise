@@ -9,7 +9,7 @@ anywhere with network access.
 
 ## Demo
 
-**Live demo:** _TODO — Render URL once deployed (see below)._
+**Live demo:** [framewise-demo.onrender.com](https://framewise-demo.onrender.com/)
 
 `app.py` is a [Gradio](https://gradio.app) UI over the same pipeline the
 container uses (`providers.get_provider`, `main.run_tasks`) — no captioning

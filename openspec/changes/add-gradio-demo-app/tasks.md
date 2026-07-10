@@ -33,15 +33,15 @@
 
 - [x] 6.1 Add `Dockerfile.demo` (ffmpeg + `requirements.txt`, runs `app.py` bound to `$PORT`) and `render.yaml` (free web service, Docker runtime)
 - [x] 6.2 Add `requirements.txt` covering `gradio` plus the provider SDKs used by `providers.py`
-- [ ] 6.3 Create the Render service from this repo — **manual**: needs a Render account/login, not available in this environment. No provider secret to set: visitors supply their own key.
-- [ ] 6.4 Confirm the service builds and starts on Render — **manual**: needs Render access
+- [x] 6.3 Create the Render service from this repo — done by the user; live at `framewise-demo.onrender.com`. No provider secret set: visitors supply their own key.
+- [x] 6.4 Confirm the service builds and starts on Render — confirmed via `GET /config`: returns Gradio 6.20.0 with `title: "FrameWise — Demo"`, matching the deployed code
 
 ## 7. Verify and document
 
-- [ ] 7.1 Smoke-test the single-video tab against the live Render URL (upload path and URL path, using a real user-supplied key) — blocked on 6.3/6.4
-- [ ] 7.2 Smoke-test the batch tab against the live Render URL using `sample_tasks.json` — blocked on 6.3/6.4 (equivalent logic already verified locally with a stub provider against `sample_tasks.json`, output passed `validation.validate_results`)
-- [ ] 7.3 Add a "Demo" section to `README.md` with the Render URL and usage instructions for both tabs — section added with local-run and deploy instructions; **swap in the real Render URL once 6.3–6.4 are done**
-- [ ] 7.4 Record the Application URL and Demo Application Platform ("Render") for the hackathon submission form — blocked on 6.3
+- [ ] 7.1 Smoke-test the single-video tab against the live Render URL (upload path and URL path, using a real user-supplied key) — app confirmed live/reachable/correctly-branded via `/config`; a full caption-generation run needs a real provider API key, which isn't available in this environment. Recommend the user runs this manually with their own key.
+- [ ] 7.2 Smoke-test the batch tab against the live Render URL using `sample_tasks.json` — same blocker as 7.1 (needs a real key); equivalent logic already verified locally with a stub provider against `sample_tasks.json`, output passed `validation.validate_results`
+- [x] 7.3 Add a "Demo" section to `README.md` with the Render URL and usage instructions for both tabs — live URL confirmed and filled in: `https://framewise-demo.onrender.com/`
+- [x] 7.4 Record the Application URL and Demo Application Platform for the hackathon submission form — **Application URL:** `https://framewise-demo.onrender.com/`; **Demo Application Platform:** Render
 
 ## 8. User-supplied provider credentials
 
