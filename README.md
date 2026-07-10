@@ -63,7 +63,7 @@ variant); text-only models can't caption frames.
 
    ```bash
    CAPTION_PROVIDER=openai \
-   OPENAI_BASE_URL=http://localhost:8000/api/v1 \
+   OPENAI_BASE_URL=http://localhost:13305/api/v1 \
    OPENAI_MODEL=<vision-model> \
    INPUT_PATH=./sample_tasks.json OUTPUT_PATH=./results.json \
    python3 main.py
@@ -74,7 +74,7 @@ variant); text-only models can't caption frames.
    ```bash
    docker run --rm --network=host \
      -e CAPTION_PROVIDER=openai \
-     -e OPENAI_BASE_URL=http://localhost:8000/api/v1 \
+     -e OPENAI_BASE_URL=http://localhost:13305/api/v1 \
      -e OPENAI_MODEL=<vision-model> \
      -v "$PWD/sample_tasks.json:/input/tasks.json:ro" \
      -v "$PWD/out:/output" \
