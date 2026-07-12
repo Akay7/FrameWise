@@ -32,6 +32,15 @@ COPY main.py media.py providers.py validation.py ./
 
 RUN mkdir -p /input /output
 
+# Debug knob for bisecting judge-environment crashes stage by stage:
+# 1=download only, 2=+ffmpeg/ffprobe, 3=+LLM call, 4=full pipeline (default).
+# Baked in like CAPTION_PROVIDER since the judge harness does not support
+# runtime env var injection. Placed after the dependency install so changing
+# it doesn't bust that cache layer. Override at build time with:
+#   docker build --build-arg PIPELINE_STAGE=1 .
+ARG PIPELINE_STAGE=4
+ENV PIPELINE_STAGE=${PIPELINE_STAGE}
+
 # Optional, OFF BY DEFAULT: bake provider settings into the image for judges
 # that cannot inject environment variables. Prefer passing these at run time
 # (docker run -e OPENAI_API_KEY=...) instead. main.py loads this file into the
