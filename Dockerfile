@@ -30,8 +30,6 @@ RUN pip3 install --no-cache-dir \
 
 COPY main.py media.py providers.py validation.py ./
 
-RUN mkdir -p /input /output
-
 # Debug knob for bisecting judge-environment crashes stage by stage:
 # 1=download only, 2=+ffmpeg/ffprobe, 3=+LLM call, 4=full pipeline (default).
 # Baked in like CAPTION_PROVIDER since the judge harness does not support
